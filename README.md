@@ -7,3 +7,6 @@ The two methods are impelemented using the SFINAE ( Substitution Failure Is Not 
 
 ## Customize the name of the memeber of a std::pair 
 The [Custompair](https://github.com/shogunxam/CodeSnippets/blob/e68aaecaaf4f13911a880fa54fb85c8e928663bd/CustomPair.cpp) module contains an implementation of a macro to create a new std::pair struct with cutom members' names. The members std::pair::first and std::pair::second are made private and they are exposed using references.
+
+## A container for any type
+The [Any](https://github.com/shogunxam/CodeSnippets/blob/707bed74eebc96fc78414ba286b19cffefaa3d9a/Any.cpp) module contains an implementation of a container for any type. It's a good replacement of the std::any class introduced with C++17 in case you are obliged to use an older C++ version.
