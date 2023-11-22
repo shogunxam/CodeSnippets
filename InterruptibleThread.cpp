@@ -1,8 +1,11 @@
+#include <iostream>
+
 #include <thread>
 #include <functional>
 #include <atomic>
 #include <stdexcept>
 #include <cassert>
+#include <memory>
 
 #define ASSERT(expr, msg) assert(((void)(msg), (expr)))
 
@@ -112,3 +115,49 @@ private:
     std::thread m_Thread;
     tInterruptionHandlerPtr m_Interruptionhandler;
 };
+
+/******************************************************************/
+
+void staticFunction(tInterruptibleThread::tInterruptionHandlerPtr handler, int i)
+{
+    std::cout << "======================== task " << i << " started" << std::endl;
+    const int maxStep = 1000;
+    for(int j = 0 ; j < maxStep; j++)
+    {
+        handler->InterruptionCheckPoint();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::cout << "======================= task " << i << " step "<< j <<"/" << maxStep<< std::endl;
+    }
+        
+    
+    std::cout << "======================== task " << i << " ended." << std::endl;
+
+}
+
+class TestClass
+{
+public:
+    void doStuff(tInterruptibleThread::tInterruptionHandlerPtr handler, int i) 
+    { 
+        staticFunction(handler, i);
+    }
+};
+
+int main()
+{
+    tInterruptibleThread::tInterruptionHandlerPtr handler = std::make_shared<tInterruptibleThread::tInterruptionHandler>();
+
+    //tThread myThread();
+    // tTask<int> myTask = [](tInterruptionHandler handler, int i) { std::cout << "test - "<< i << std::endl; };
+    // myThread.Start(std::move(myTask), handler, 10);
+    TestClass testClass;
+    auto mytask = std::bind(&TestClass::doStuff, &testClass, std::placeholders::_1, std::placeholders::_2);
+
+    tInterruptibleThread myThread1(true, mytask, handler, 1);
+    tInterruptibleThread myThread2(true, staticFunction, handler, 2);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    myThread1.Interrupt();
+    myThread2.Interrupt();
+    
+    return 0;
+}
