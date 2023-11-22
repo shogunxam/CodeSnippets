@@ -1,3 +1,4 @@
+/* Online C++ Compiler and Editor */
 #include <iostream>
 
 #include <thread>
@@ -69,6 +70,7 @@ public:
                   }
                   catch (...)
                   {
+                      // The tInterruptibleThread instance could be already destroied in detahced mode
                       if (!detached)
                       {
                           m_ExceptionPtr = std::current_exception();
@@ -117,6 +119,7 @@ private:
 };
 
 /******************************************************************/
+/*************************** TEST *********************************/
 
 void staticFunction(tInterruptibleThread::tInterruptionHandlerPtr handler, int i)
 {
@@ -144,20 +147,31 @@ public:
 };
 
 int main()
-{
-    tInterruptibleThread::tInterruptionHandlerPtr handler = std::make_shared<tInterruptibleThread::tInterruptionHandler>();
-
-    //tThread myThread();
-    // tTask<int> myTask = [](tInterruptionHandler handler, int i) { std::cout << "test - "<< i << std::endl; };
-    // myThread.Start(std::move(myTask), handler, 10);
+{ 
     TestClass testClass;
     auto mytask = std::bind(&TestClass::doStuff, &testClass, std::placeholders::_1, std::placeholders::_2);
-
-    tInterruptibleThread myThread1(true, mytask, handler, 1);
-    tInterruptibleThread myThread2(true, staticFunction, handler, 2);
+    tInterruptibleThread::tInterruptionHandlerPtr handler1 = std::make_shared<tInterruptibleThread::tInterruptionHandler>();
+    tInterruptibleThread myThread1(true, mytask, handler1, 1);
+    
+    tInterruptibleThread::tInterruptionHandlerPtr handler2 = std::make_shared<tInterruptibleThread::tInterruptionHandler>();
+    tInterruptibleThread myThread2(false, staticFunction, handler2, 2);
+    
     std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cout << "======================== Interrupting Thread 1"  << "======================== " << std::endl;
     myThread1.Interrupt();
+    
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cout << "======================== Interrupting Thread 2"  << "======================== " << std::endl;
     myThread2.Interrupt();
     
+    try
+    {
+        myThread2.Join(); // Rethrow the exception causing the thread interruption
+    }
+    catch( std::exception &e)
+    {
+        std::cout << e.what() << std::endl;
+    }
+
     return 0;
 }
