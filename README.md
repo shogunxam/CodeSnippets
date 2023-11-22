@@ -1,6 +1,9 @@
 # CodeSnippets
 This project, contains a list of code snippets for several purpose
 
+## Interruptible Thread
+The [InterruptibleThread](https://github.com/shogunxam/CodeSnippets/blob/8b6bffe081d648a73155d4c439ab10ca6861a8a7/InterruptibleThread.cpp) modules contains an implementation of Thread class. The thread is made interruptble using interruption checkpoint in the running function.
+
 ## Nested Vectors Recursion
 The [NestedVectorsRecursion](https://github.com/shogunxam/CodeSnippets/blob/90857a8ddbaa7d11d7c301312c14f75ca3a7ecbb/NestedVectorsRecursion.cpp) module contains an implementation of two template functions to recursivelly modify or print the content of nested std::vectors.
 The two methods are impelemented using the SFINAE ( Substitution Failure Is Not An Error ) principle.
