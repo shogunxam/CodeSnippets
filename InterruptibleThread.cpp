@@ -1,13 +1,14 @@
-/* Online C++ Compiler and Editor */
 #include <iostream>
 
-#include <thread>
+#include <condition_variable>
 #include <functional>
-#include <atomic>
-#include <stdexcept>
-#include <cassert>
 #include <memory>
+#include <stdexcept>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
+#include <cassert>
 #define ASSERT(expr, msg) assert(((void)(msg), (expr)))
 
 class tInterruptibleThread
@@ -16,19 +17,25 @@ public:
     class tInterruptionHandler
     {
     public:
+        class tException : public std::exception
+        {
+        public:
+            virtual char const* what() const noexcept override { return "Thread interrupted"; }
+        };
+
         tInterruptionHandler() : m_Interrupt(false) {}
         virtual void InterruptionCheckPoint()
         {
             if (m_Interrupt)
             {
-                throw std::runtime_error("Thread interrupted");
+                throw tException();
             }
         }
         bool Interrupted() { return m_Interrupt; }
         void Interrupt() { m_Interrupt = true; }
 
     protected:
-        std::atomic<bool> m_Interrupt;
+        std::atomic_bool m_Interrupt;
     };
     typedef std::shared_ptr<tInterruptionHandler> tInterruptionHandlerPtr;
 
@@ -36,65 +43,80 @@ public:
 
     using NativeHandleType = std::thread::native_handle_type;
 
-    
+
     tInterruptibleThread() noexcept = default;
-    tInterruptibleThread(tInterruptibleThread&& t) noexcept : m_ExceptionPtr(std::move(t.m_ExceptionPtr)), m_Thread(std::move(t.m_Thread)) {}
 
-    tInterruptibleThread& operator=(tInterruptibleThread&& t) noexcept
+    ~tInterruptibleThread()
     {
-        m_ExceptionPtr = std::move(t.m_ExceptionPtr);
-        m_Thread = std::move(t.m_Thread);
-        return *this;
-    }
-
-    ~tInterruptibleThread() 
-    { 
-        if (m_Thread.joinable())
+        if (m_xThread && m_xThread->joinable())
         {
-            m_Thread.join();
+            JoinImp();
         }
     }
 
     template <typename Callable, typename... Args>
-    tInterruptibleThread(bool&& detached, Callable&& f, tInterruptionHandlerPtr xInterrupHandler, Args&&... args)
+    tInterruptibleThread(bool detached, Callable&& f, tInterruptionHandlerPtr xInterrupHandler, Args&&... args)
         : m_ExceptionPtr(nullptr)
-        , m_Thread(
-              [&](bool&& detached,
-                  typename std::decay<Callable>::type&& f,
-                  tInterruptionHandlerPtr xInterrupHandler,
-                  typename std::decay<Args>::type&&... args)
-              {
-                  try
-                  {
-                      std::bind(f, std::forward<tInterruptionHandlerPtr>(xInterrupHandler), args...)();
-                  }
-                  catch (...)
-                  {
-                      // The tInterruptibleThread instance could be already destroied in detahced mode
-                      if (!detached)
-                      {
-                          m_ExceptionPtr = std::current_exception();
-                      }
-                  }
-              },
+        , m_Mutex()
+        , m_Ready(false)
+        , m_Interruptionhandler(xInterrupHandler)
+    {        
+        auto task = [this](bool isDetached,
+                        typename std::decay<Callable>::type&& f,
+                        tInterruptionHandlerPtr xInterrupHandler,
+                        typename std::decay<Args>::type&&... args)
+        {
+            if (!isDetached)
+            {
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                m_Ready = false;
+            }
+            try
+            {
+                std::bind(f, std::forward<tInterruptionHandlerPtr>(xInterrupHandler), args...)();
+            }
+            catch (...)
+            {
+                // The tInterruptibleThread instance could be already destroied in detahced mode
+                if (!isDetached)
+                {
+                    m_ExceptionPtr = std::current_exception();
+                }
+            }
+
+            if (!isDetached)
+            {
+                {
+                    std::lock_guard<std::mutex> lock(m_Mutex);
+                    m_Ready = true;
+                }
+                m_Condition.notify_one();
+            }
+        };
+
+        m_xThread = std::unique_ptr<std::thread>(new std::thread(
+              task,               
               detached,
               std::forward<Callable>(f),
               xInterrupHandler,
-              std::forward<Args>(args)...) 
-        , m_Interruptionhandler(xInterrupHandler)
-    {
-        ASSERT(m_Interruptionhandler, "Interruption Handler cannot be null");
+              std::forward<Args>(args)...));
+
+        if(!m_xThread)
+        {
+            throw std::runtime_error("Cannot create the tread");
+        }
+        
         if (detached)
         {
-            m_Thread.detach();
+            m_xThread->detach();
         }
     }
 
-    bool Joinable() const noexcept { return m_Thread.joinable(); }
+    bool Joinable() const noexcept { return m_xThread->joinable(); }
 
     void Join()
     {
-        m_Thread.join();
+        JoinImp();
 
         if (m_ExceptionPtr != nullptr)
         {
@@ -102,20 +124,40 @@ public:
         }
     }
 
-    void Interrupt() { m_Interruptionhandler->Interrupt(); }
+    tInterruptionHandlerPtr InterruptionHandler() { return m_Interruptionhandler; }
 
-    Id GetId() const noexcept { return m_Thread.get_id(); }
+    void Interrupt()
+    {
+        if (m_Interruptionhandler)
+        {
+            m_Interruptionhandler->Interrupt();
+        }
+    }
 
-    NativeHandleType NativeHandle() { return m_Thread.native_handle(); }
+    Id GetId() const noexcept { return m_xThread->get_id(); }
+
+    NativeHandleType NativeHandle() { return m_xThread->native_handle(); }
 
     static uint32_t HardwareConcurrency() noexcept { return std::thread::hardware_concurrency(); }
 
     static void Wait(std::chrono::duration<double, std::milli> t) { std::this_thread::sleep_for(t); }
 
 private:
+    void JoinImp()
+    {
+        // m_Thread.join() could throw No such proccess exception
+        // also if the thread is joinable so we detach the tread
+        // and we wait for completion
+        m_xThread->detach();
+        std::unique_lock<std::mutex> lock(m_Mutex);
+        m_Condition.wait(lock, [&] { return (bool)m_Ready; });
+    }
     std::exception_ptr m_ExceptionPtr;
-    std::thread m_Thread;
     tInterruptionHandlerPtr m_Interruptionhandler;
+    std::condition_variable m_Condition;
+    std::mutex m_Mutex;
+    bool m_Ready;
+    std::unique_ptr<std::thread> m_xThread;
 };
 
 /******************************************************************/
