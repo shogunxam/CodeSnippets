@@ -13,3 +13,6 @@ The [Custompair](https://github.com/shogunxam/CodeSnippets/blob/e68aaecaaf4f1391
 
 ## A container for any type
 The [Any](Any.cpp) module contains an implementation of a container for any type. It's a good replacement of the std::any class introduced with C++17 in case you are obliged to use an older C++ version.
+
+## A memory binary input stream
+The [MemoryBinaryStream](MemoryBinaryStream.cpp) module contains an implementation of an in memory binary stream. It can be used to store data directly in a std::vector where an input stream is required.
