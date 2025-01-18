@@ -16,3 +16,6 @@ The [Any](Any.cpp) module contains an implementation of a container for any type
 
 ## A memory binary input stream
 The [MemoryBinaryStream](MemoryBinaryStream.cpp) module contains an implementation of an in memory binary stream. It can be used to store data directly in a std::vector where an input stream is required.
+
+## Support for UTF-8 path in Microsoft Windows
+The [UTF8](UTF8.cpp) module contains a wrapper for the fstream clasess to open files with a path UTF-8 encoded.
